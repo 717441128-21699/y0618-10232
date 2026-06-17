@@ -350,6 +350,20 @@ router.get('/customer-statement/:customer_id', async (req, res) => {
     return res.status(404).json({ error: '客户不存在' });
   }
 
+  // 计算期初余额：开始日期之前的所有开票 - 所有收款
+  let openingBalance = 0;
+  if (start_date) {
+    const beforeInvoices = await db.prepare(`
+      SELECT COALESCE(SUM(total_amount), 0) as total FROM invoices
+      WHERE customer_id = ? AND invoice_date < ?
+    `).get(customer_id, start_date);
+    const beforePayments = await db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total FROM payments
+      WHERE customer_id = ? AND payment_date < ?
+    `).get(customer_id, start_date);
+    openingBalance = (beforeInvoices?.total || 0) - (beforePayments?.total || 0);
+  }
+
   let whereClause = 'WHERE customer_id = ?';
   let params = [customer_id];
 
@@ -365,7 +379,7 @@ router.get('/customer-statement/:customer_id', async (req, res) => {
   const invoices = await db.prepare(`
     SELECT * FROM invoices
     ${whereClause}
-    ORDER BY invoice_date DESC
+    ORDER BY invoice_date ASC
   `).all(...params);
 
   let paymentWhere = 'WHERE customer_id = ?';
@@ -384,7 +398,7 @@ router.get('/customer-statement/:customer_id', async (req, res) => {
     FROM payments p
     JOIN invoices i ON p.invoice_id = i.id
     ${paymentWhere}
-    ORDER BY payment_date DESC
+    ORDER BY p.payment_date ASC
   `).all(...paymentParams);
 
   const transactions = [];
@@ -418,7 +432,8 @@ router.get('/customer-statement/:customer_id', async (req, res) => {
 
   transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  let runningBalance = 0;
+  // 流水余额从期初余额开始滚动
+  let runningBalance = openingBalance;
   transactions.forEach(t => {
     runningBalance = runningBalance + t.debit - t.credit;
     t.balance = runningBalance;
@@ -426,21 +441,22 @@ router.get('/customer-statement/:customer_id', async (req, res) => {
 
   const totalInvoiced = invoices.reduce((sum, inv) => sum + inv.total_amount, 0);
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-  const totalRemaining = totalInvoiced - totalPaid;
+  const closingBalance = openingBalance + totalInvoiced - totalPaid;
 
   res.json({
     customer,
     period: { start_date, end_date },
     summary: {
+      opening_balance: openingBalance,
       total_invoiced: totalInvoiced,
       total_paid: totalPaid,
-      total_remaining: totalRemaining,
+      closing_balance: closingBalance,
       invoice_count: invoices.length,
       payment_count: payments.length
     },
     invoices,
     payments,
-    transactions: transactions.reverse()
+    transactions: transactions
   });
 });
 

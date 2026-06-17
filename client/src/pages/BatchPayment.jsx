@@ -277,159 +277,153 @@ function BatchPayment() {
           </Space>
         }
       >
-        <Card size="small" title="选择客户" style={{ marginBottom: 16 }}>
-          <Row gutter={16} align="middle">
-            <Col span={8}>
-              <Form.Item
-                name="customer_id"
-                label="客户"
-                rules={[{ required: true, message: '请选择客户' }]}
-                style={{ marginBottom: 0 }}
-              >
-                <Select
-                  placeholder="请选择客户"
-                  value={selectedCustomerId}
-                  onChange={handleCustomerChange}
-                  showSearch
-                  optionFilterProp="children"
-                  filterOption={(input, option) =>
-                    option.children.toLowerCase().includes(input.toLowerCase())
-                  }
+        <Form form={form} layout="vertical">
+          <Card size="small" title="选择客户" style={{ marginBottom: 16 }}>
+            <Row gutter={16} align="middle">
+              <Col span={8}>
+                <Form.Item
+                  name="customer_id"
+                  label="客户"
+                  rules={[{ required: true, message: '请选择客户' }]}
+                  style={{ marginBottom: 0 }}
                 >
-                  {customers.map(c => (
-                    <Option key={c.id} value={c.id}>{c.name}</Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col>
-              <Button
-                type="primary"
-                icon={<AppstoreOutlined />}
-                onClick={queryUnpaidInvoices}
-                disabled={!selectedCustomerId}
-              >
-                查询未结清发票
-              </Button>
-            </Col>
-          </Row>
-        </Card>
-
-        {invoices.length > 0 && (
-          <>
-            <Card size="small" title="收款信息" style={{ marginBottom: 16 }}>
-              <Row gutter={16}>
-                <Col span={8}>
-                  <Form.Item
-                    name="total_amount"
-                    label="总到账金额"
-                    rules={[{ required: true, message: '请输入总到账金额' }]}
-                    style={{ marginBottom: 0 }}
+                  <Select
+                    placeholder="请选择客户"
+                    onChange={handleCustomerChange}
+                    showSearch
+                    optionFilterProp="children"
+                    filterOption={(input, option) =>
+                      option.children.toLowerCase().includes(input.toLowerCase())
+                    }
                   >
-                    <InputNumber
-                      min={0.01}
-                      step={0.01}
-                      style={{ width: '100%' }}
-                      placeholder="请输入总到账金额"
-                      value={totalAmount}
-                      onChange={setTotalAmount}
-                      addonBefore="¥"
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item
-                    name="payment_date"
-                    label="收款日期"
-                    rules={[{ required: true, message: '请选择收款日期' }]}
-                    style={{ marginBottom: 0 }}
-                  >
-                    <DatePicker style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item
-                    name="payment_method"
-                    label="收款方式"
-                    rules={[{ required: true, message: '请选择收款方式' }]}
-                    style={{ marginBottom: 0 }}
-                  >
-                    <Select placeholder="请选择收款方式">
-                      {paymentMethodOptions.map(item => (
-                        <Option key={item.value} value={item.value}>{item.label}</Option>
-                      ))}
-                    </Select>
-                  </Form.Item>
-                </Col>
-              </Row>
-            </Card>
+                    {customers.map(c => (
+                      <Option key={c.id} value={c.id}>{c.name}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col>
+                <Button
+                  type="primary"
+                  icon={<AppstoreOutlined />}
+                  onClick={queryUnpaidInvoices}
+                  disabled={!selectedCustomerId}
+                >
+                  查询未结清发票
+                </Button>
+              </Col>
+            </Row>
+          </Card>
 
-            <Card size="small" title="选择发票并分配金额" style={{ marginBottom: 16 }}>
-              <Table
-                dataSource={invoices}
-                columns={columns}
-                rowKey="id"
-                loading={loading}
-                scroll={{ x: 1000 }}
-                pagination={false}
-                rowClassName={(record) => record.checked ? 'table-row-selected' : ''}
-              />
-            </Card>
-
-            <Card size="small">
-              <Row gutter={24} align="middle">
-                <Col>
-                  <Statistic
-                    title="已勾选发票"
-                    value={checkedInvoices.length}
-                    suffix="张"
-                    valueStyle={{ color: '#1890ff' }}
-                  />
-                </Col>
-                <Col>
-                  <Statistic
-                    title="已分配金额"
-                    value={totalAllocated}
-                    prefix="¥"
-                    formatter={(val) => val?.toLocaleString() || 0}
-                    valueStyle={{ color: '#52c41a' }}
-                  />
-                </Col>
-                <Col>
-                  <Statistic
-                    title="待分配金额"
-                    value={Math.max(0, pendingAllocation)}
-                    prefix="¥"
-                    formatter={(val) => val?.toLocaleString() || 0}
-                    valueStyle={{ color: pendingAllocation > 0 ? '#faad14' : '#52c41a' }}
-                  />
-                </Col>
-                <Col flex="auto" style={{ textAlign: 'right' }}>
-                  <Space>
-                    <Button onClick={autoAllocate} disabled={!totalAmount || totalAmount <= 0}>
-                      自动分配（按到期日优先）
-                    </Button>
-                    <Divider type="vertical" />
-                    <Button
-                      type="primary"
-                      icon={<SaveOutlined />}
-                      onClick={handleSave}
-                      loading={loading}
-                      disabled={checkedInvoices.length === 0 || Math.abs(pendingAllocation) > 0.01}
+          {invoices.length > 0 && (
+            <>
+              <Card size="small" title="收款信息" style={{ marginBottom: 16 }}>
+                <Row gutter={16}>
+                  <Col span={8}>
+                    <Form.Item
+                      name="total_amount"
+                      label="总到账金额"
+                      rules={[{ required: true, message: '请输入总到账金额' }]}
+                      style={{ marginBottom: 0 }}
                     >
-                      保存
-                    </Button>
-                  </Space>
-                </Col>
-              </Row>
-            </Card>
-          </>
-        )}
+                      <InputNumber
+                        min={0.01}
+                        step={0.01}
+                        style={{ width: '100%' }}
+                        placeholder="请输入总到账金额"
+                        onChange={setTotalAmount}
+                        addonBefore="¥"
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item
+                      name="payment_date"
+                      label="收款日期"
+                      rules={[{ required: true, message: '请选择收款日期' }]}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <DatePicker style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item
+                      name="payment_method"
+                      label="收款方式"
+                      rules={[{ required: true, message: '请选择收款方式' }]}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <Select placeholder="请选择收款方式">
+                        {paymentMethodOptions.map(item => (
+                          <Option key={item.value} value={item.value}>{item.label}</Option>
+                        ))}
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </Card>
 
-        <Form form={form} style={{ display: 'none' }}>
-          <Form.Item name="customer_id" />
-          <Form.Item name="payment_date" />
-          <Form.Item name="payment_method" />
+              <Card size="small" title="选择发票并分配金额" style={{ marginBottom: 16 }}>
+                <Table
+                  dataSource={invoices}
+                  columns={columns}
+                  rowKey="id"
+                  loading={loading}
+                  scroll={{ x: 1000 }}
+                  pagination={false}
+                  rowClassName={(record) => record.checked ? 'table-row-selected' : ''}
+                />
+              </Card>
+
+              <Card size="small">
+                <Row gutter={24} align="middle">
+                  <Col>
+                    <Statistic
+                      title="已勾选发票"
+                      value={checkedInvoices.length}
+                      suffix="张"
+                      valueStyle={{ color: '#1890ff' }}
+                    />
+                  </Col>
+                  <Col>
+                    <Statistic
+                      title="已分配金额"
+                      value={totalAllocated}
+                      prefix="¥"
+                      formatter={(val) => val?.toLocaleString() || 0}
+                      valueStyle={{ color: '#52c41a' }}
+                    />
+                  </Col>
+                  <Col>
+                    <Statistic
+                      title="待分配金额"
+                      value={Math.max(0, pendingAllocation)}
+                      prefix="¥"
+                      formatter={(val) => val?.toLocaleString() || 0}
+                      valueStyle={{ color: pendingAllocation > 0 ? '#faad14' : '#52c41a' }}
+                    />
+                  </Col>
+                  <Col flex="auto" style={{ textAlign: 'right' }}>
+                    <Space>
+                      <Button onClick={autoAllocate} disabled={!totalAmount || totalAmount <= 0}>
+                        自动分配（按到期日优先）
+                      </Button>
+                      <Divider type="vertical" />
+                      <Button
+                        type="primary"
+                        icon={<SaveOutlined />}
+                        onClick={handleSave}
+                        loading={loading}
+                        disabled={checkedInvoices.length === 0 || Math.abs(pendingAllocation) > 0.01}
+                      >
+                        保存
+                      </Button>
+                    </Space>
+                  </Col>
+                </Row>
+              </Card>
+            </>
+          )}
         </Form>
       </Card>
     </div>

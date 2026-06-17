@@ -13,10 +13,13 @@ import {
   Descriptions,
   Tag,
   Row,
-  Col
+  Col,
+  Select,
+  DatePicker
 } from 'antd';
 import { PlusOutlined, SearchOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons';
 import { customerApi, exportApi } from '../api';
+import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 
 function CustomerList() {
@@ -31,6 +34,9 @@ function CustomerList() {
   const [editingItem, setEditingItem] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
   const [form] = Form.useForm();
+  const [exportModalVisible, setExportModalVisible] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportForm] = Form.useForm();
 
   useEffect(() => {
     loadData();
@@ -104,7 +110,40 @@ function CustomerList() {
   };
 
   const handleExportStatement = (id) => {
+    if (!id) {
+      message.warning('请先选择客户');
+      return;
+    }
     exportApi.customerStatement(id, {});
+  };
+
+  const handleOpenExportModal = () => {
+    exportForm.resetFields();
+    exportForm.setFieldsValue({
+      customer_id: undefined,
+      date_range: [dayjs().subtract(1, 'year').startOf('day'), dayjs().endOf('day')]
+    });
+    setExportModalVisible(true);
+  };
+
+  const handleExportSubmit = async () => {
+    try {
+      const values = await exportForm.validateFields();
+      setExportLoading(true);
+      const params = {};
+      if (values.date_range && values.date_range.length === 2) {
+        params.start_date = values.date_range[0].format('YYYY-MM-DD');
+        params.end_date = values.date_range[1].format('YYYY-MM-DD');
+      }
+      await exportApi.customerStatement(values.customer_id, params);
+      message.success('导出成功');
+      setExportModalVisible(false);
+    } catch (error) {
+      if (error.errorFields) return;
+      message.error(error.response?.data?.error || '导出失败');
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const columns = [
@@ -162,7 +201,7 @@ function CustomerList() {
               allowClear
             />
             <Button icon={<PlusOutlined />} type="primary" onClick={handleAdd}>新增客户</Button>
-            <Button onClick={() => handleExportStatement(detailItem?.id)}>导出对账单</Button>
+            <Button onClick={handleOpenExportModal}>导出对账单</Button>
           </Space>
         }
       >
@@ -290,6 +329,47 @@ function CustomerList() {
             </Card>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        title="导出客户对账单"
+        open={exportModalVisible}
+        onOk={handleExportSubmit}
+        onCancel={() => setExportModalVisible(false)}
+        confirmLoading={exportLoading}
+        okText="导出"
+        cancelText="取消"
+        width={480}
+      >
+        <Form form={exportForm} layout="vertical">
+          <Form.Item
+            name="customer_id"
+            label="选择客户"
+            rules={[{ required: true, message: '请选择客户' }]}
+          >
+            <Select
+              placeholder="请选择客户"
+              showSearch
+              optionFilterProp="children"
+              filterOption={(input, option) =>
+                option.children.toLowerCase().includes(input.toLowerCase())
+              }
+            >
+              {data.map(c => (
+                <Select.Option key={c.id} value={c.id}>{c.name}</Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item
+            name="date_range"
+            label="对账时间段（可选）"
+          >
+            <DatePicker.RangePicker
+              style={{ width: '100%' }}
+              placeholder={['开始日期', '结束日期']}
+            />
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );

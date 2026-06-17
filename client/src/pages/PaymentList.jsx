@@ -147,8 +147,14 @@ function PaymentList() {
   };
 
   const validateAmount = async (rule, value) => {
-    if (value && selectedInvoice && value > selectedInvoice.remaining_amount) {
-      throw new Error(`收款金额不能超过待付金额 ¥${selectedInvoice.remaining_amount?.toLocaleString()}`);
+    if (value && selectedInvoice) {
+      let available = selectedInvoice.remaining_amount;
+      if (editingItem && editingItem.invoice_id === selectedInvoice.id) {
+        available = selectedInvoice.remaining_amount + editingItem.amount;
+      }
+      if (value > available) {
+        throw new Error(`收款金额不能超过可收余额 ¥${available?.toLocaleString()}`);
+      }
     }
   };
 

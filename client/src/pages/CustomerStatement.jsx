@@ -73,8 +73,8 @@ function CustomerStatement() {
 
   const totalDebit = data?.transactions?.reduce((sum, t) => sum + (t.debit || 0), 0) || 0;
   const totalCredit = data?.transactions?.reduce((sum, t) => sum + (t.credit || 0), 0) || 0;
-  const endingBalance = data?.transactions?.length > 0 ? data.transactions[0].balance : (data?.summary?.total_remaining || 0);
-  const beginningBalance = endingBalance - totalDebit + totalCredit;
+  const beginningBalance = data?.summary?.opening_balance ?? 0;
+  const endingBalance = data?.summary?.closing_balance ?? 0;
 
   const columns = [
     {
