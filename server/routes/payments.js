@@ -99,7 +99,7 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const {
+  let {
     customer_id,
     invoice_id,
     amount,
@@ -110,7 +110,7 @@ router.post('/', async (req, res) => {
     remarks
   } = req.body;
 
-  if (!customer_id || !invoice_id || !amount || !payment_date) {
+  if (!invoice_id || !amount || !payment_date) {
     return res.status(400).json({ error: '必填字段不能为空' });
   }
 
@@ -121,6 +121,10 @@ router.post('/', async (req, res) => {
   const invoice = await db.get('SELECT * FROM invoices WHERE id = ?', invoice_id);
   if (!invoice) {
     return res.status(404).json({ error: '发票不存在' });
+  }
+
+  if (!customer_id) {
+    customer_id = invoice.customer_id;
   }
 
   if (invoice.customer_id !== parseInt(customer_id)) {
@@ -172,7 +176,7 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
-  const {
+  let {
     customer_id,
     invoice_id,
     amount,
@@ -183,7 +187,7 @@ router.put('/:id', async (req, res) => {
     remarks
   } = req.body;
 
-  if (!customer_id || !invoice_id || !amount || !payment_date) {
+  if (!invoice_id || !amount || !payment_date) {
     return res.status(400).json({ error: '必填字段不能为空' });
   }
 
@@ -205,6 +209,9 @@ router.put('/:id', async (req, res) => {
     const newInvoice = await db.get('SELECT * FROM invoices WHERE id = ?', invoice_id);
     if (!newInvoice) {
       return res.status(404).json({ error: '新发票不存在' });
+    }
+    if (!customer_id) {
+      customer_id = newInvoice.customer_id;
     }
     if (newInvoice.customer_id !== parseInt(customer_id)) {
       return res.status(400).json({ error: '客户与发票不匹配' });
@@ -236,6 +243,12 @@ router.put('/:id', async (req, res) => {
       WHERE id = ?
     `, newPaidAmount, newRemainingAmount, newStatus, invoice_id);
   } else {
+    if (!customer_id) {
+      customer_id = oldInvoice.customer_id;
+    }
+    if (oldInvoice.customer_id !== parseInt(customer_id)) {
+      return res.status(400).json({ error: '客户与发票不匹配' });
+    }
     const amountDiff = amount - payment.amount;
     const newPaidAmount = oldInvoice.paid_amount + amountDiff;
     const newRemainingAmount = oldInvoice.total_amount - newPaidAmount;

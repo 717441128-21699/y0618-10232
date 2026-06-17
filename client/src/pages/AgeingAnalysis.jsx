@@ -31,15 +31,59 @@ function AgeingAnalysis() {
     }
   };
 
+  const transformData = (rawData) => {
+    const overall = rawData.overall || {};
+    const totalRemaining = overall.total_remaining || 0;
+    const totalOverdue = overall.total_overdue || 0;
+    const overdueRate = totalRemaining > 0 ? (totalOverdue / totalRemaining * 100) : 0;
+
+    const byCustomer = (rawData.by_customer || []).map(customer => ({
+      ...customer,
+      total_amount: customer.total_remaining,
+      ageing: {
+        not_due: customer.buckets?.not_due?.amount || 0,
+        '0-30': customer.buckets?.['0-30']?.amount || 0,
+        '31-60': customer.buckets?.['31-60']?.amount || 0,
+        '61-90': customer.buckets?.['61-90']?.amount || 0,
+        '91-180': customer.buckets?.['91-180']?.amount || 0,
+        '180+': customer.buckets?.over_180?.amount || 0
+      }
+    }));
+
+    const details = (rawData.invoices || []).map(invoice => ({
+      ...invoice,
+      invoice_amount: invoice.total_amount || invoice.amount,
+      ageing_period: invoice.ageing_bucket_text,
+      overdue_days: invoice.days_overdue
+    }));
+
+    return {
+      ...rawData,
+      total_receivable: totalRemaining,
+      total_overdue: totalOverdue,
+      overdue_rate: overdueRate,
+      ageing_distribution: {
+        not_due: overall.not_due,
+        '0-30': overall['0-30'],
+        '31-60': overall['31-60'],
+        '61-90': overall['61-90'],
+        '91-180': overall['91-180'],
+        '180+': overall.over_180
+      },
+      by_customer: byCustomer,
+      details: details
+    };
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
       const params = {
-        customerId: customerId || undefined,
-        cutoffDate: cutoffDate?.format('YYYY-MM-DD')
+        customer_id: customerId || undefined,
+        as_of_date: cutoffDate?.format('YYYY-MM-DD')
       };
       const res = await receivableApi.ageingAnalysis(params);
-      setData(res);
+      setData(transformData(res));
     } catch (error) {
       message.error('加载账龄分析数据失败');
     } finally {
@@ -49,8 +93,8 @@ function AgeingAnalysis() {
 
   const handleExport = () => {
     const params = {
-      customerId: customerId || undefined,
-      cutoffDate: cutoffDate?.format('YYYY-MM-DD')
+      customer_id: customerId || undefined,
+      as_of_date: cutoffDate?.format('YYYY-MM-DD')
     };
     exportApi.ageingAnalysis(params);
   };

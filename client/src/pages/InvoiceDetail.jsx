@@ -93,6 +93,7 @@ function InvoiceDetail() {
       const submitData = {
         ...values,
         invoice_id: id,
+        customer_id: detail?.customer_id,
         payment_date: values.payment_date?.format('YYYY-MM-DD')
       };
       await paymentApi.create(submitData);
@@ -227,7 +228,6 @@ function InvoiceDetail() {
                 <Descriptions.Item label="开票日期">{detail.invoice_date}</Descriptions.Item>
                 <Descriptions.Item label="到期日期">{detail.due_date}</Descriptions.Item>
                 <Descriptions.Item label="发票金额">¥ {detail.invoice_amount?.toLocaleString() || 0}</Descriptions.Item>
-                <Descriptions.Item label="税率">{detail.tax_rate ? `${(detail.tax_rate * 100).toFixed(0)}%` : '-'}</Descriptions.Item>
                 <Descriptions.Item label="税额">¥ {detail.tax_amount?.toLocaleString() || 0}</Descriptions.Item>
                 <Descriptions.Item label="总金额">¥ {detail.total_amount?.toLocaleString() || 0}</Descriptions.Item>
                 <Descriptions.Item label="已付金额">

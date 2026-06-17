@@ -31,7 +31,7 @@ const { Option } = Select;
 
 function ReceivableList() {
   const navigate = useNavigate();
-  const [summary, setSummary] = useState(null);
+  const [allSummary, setAllSummary] = useState(null);
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
@@ -41,6 +41,27 @@ function ReceivableList() {
   const [reminderVisible, setReminderVisible] = useState(false);
   const [reminderInvoice, setReminderInvoice] = useState(null);
   const [reminderForm] = Form.useForm();
+
+  const calculateSummary = (invoices) => {
+    const summary = {
+      total_remaining: 0,
+      by_status: {
+        not_due: { amount: 0, count: 0 },
+        due_soon: { amount: 0, count: 0 },
+        overdue: { amount: 0, count: 0 }
+      }
+    };
+
+    invoices.forEach(inv => {
+      summary.total_remaining += inv.remaining_amount || 0;
+      if (summary.by_status[inv.status]) {
+        summary.by_status[inv.status].amount += inv.remaining_amount || 0;
+        summary.by_status[inv.status].count++;
+      }
+    });
+
+    return summary;
+  };
 
   useEffect(() => {
     loadData();
@@ -63,7 +84,7 @@ function ReceivableList() {
     setLoading(true);
     try {
       const summaryData = await receivableApi.summary();
-      setSummary(summaryData);
+      setAllSummary(summaryData);
       
       let invoices = summaryData.invoices || [];
       
@@ -97,20 +118,24 @@ function ReceivableList() {
 
   const getStatusTag = (status, overdueLevel) => {
     const statusMap = {
-      unpaid: { text: '未付款', color: 'red' },
-      partial: { text: '部分付款', color: 'orange' },
-      paid: { text: '已结清', color: 'green' }
+      not_due: { text: '未到期', color: 'green' },
+      due_soon: { text: '即将到期', color: 'orange' },
+      overdue: { text: '已逾期', color: 'red' }
     };
-    const overdueColors = {
-      0: statusMap[status]?.color || 'default',
-      1: 'orange',
-      2: 'red',
-      3: 'magenta'
+
+    const overdueLevelMap = {
+      level1: { text: '逾期30天内', color: 'orange' },
+      level2: { text: '逾期30-60天', color: 'red' },
+      level3: { text: '逾期60天以上', color: 'magenta' }
     };
-    const color = overdueLevel > 0 ? overdueColors[overdueLevel] : statusMap[status]?.color || 'default';
-    const baseText = statusMap[status]?.text || status;
-    const overdueText = overdueLevel > 0 ? ` (逾期${overdueLevel}级)` : '';
-    return <Tag color={color}>{baseText}{overdueText}</Tag>;
+
+    if (status === 'overdue' && overdueLevel) {
+      const levelInfo = overdueLevelMap[overdueLevel];
+      return <Tag color={levelInfo?.color || 'red'}>{levelInfo?.text || '已逾期'}</Tag>;
+    }
+
+    const statusInfo = statusMap[status];
+    return <Tag color={statusInfo?.color || 'default'}>{statusInfo?.text || status}</Tag>;
   };
 
   const handleViewDetail = (id) => {
@@ -162,16 +187,16 @@ function ReceivableList() {
     { 
       title: '状态', 
       dataIndex: 'status',
-      width: 140,
-      render: (_, record) => getStatusTag(record.status, record.overdue_level)
+      width: 160,
+      render: (_, record) => getStatusTag(record.status, record.overdueLevel)
     },
     { 
       title: '逾期天数', 
-      dataIndex: 'overdue_days',
+      dataIndex: 'overdueDays',
       width: 100,
       render: (val, record) => {
-        if (record.overdue_level > 0) {
-          return <span className="amount-negative">{val || 0} 天</span>;
+        if (record.status === 'overdue') {
+          return <span className="amount-negative">{record.overdueDays || 0} 天</span>;
         }
         return '-';
       }
@@ -189,6 +214,8 @@ function ReceivableList() {
     }
   ];
 
+  const filteredSummary = calculateSummary(data);
+
   return (
     <div>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
@@ -196,7 +223,7 @@ function ReceivableList() {
           <Card>
             <Statistic
               title="应收账款总额"
-              value={summary?.total_remaining || 0}
+              value={filteredSummary.total_remaining || 0}
               precision={2}
               prefix={<MoneyCollectOutlined />}
               suffix="元"
@@ -208,7 +235,7 @@ function ReceivableList() {
           <Card>
             <Statistic
               title="未到期金额"
-              value={summary?.by_status?.not_due?.amount || 0}
+              value={filteredSummary.by_status.not_due.amount || 0}
               precision={2}
               prefix={<FileTextOutlined />}
               suffix="元"
@@ -220,7 +247,7 @@ function ReceivableList() {
           <Card>
             <Statistic
               title="即将到期金额"
-              value={summary?.by_status?.due_soon?.amount || 0}
+              value={filteredSummary.by_status.due_soon.amount || 0}
               precision={2}
               prefix={<WarningOutlined />}
               suffix="元"
@@ -232,7 +259,7 @@ function ReceivableList() {
           <Card>
             <Statistic
               title="已逾期金额"
-              value={summary?.by_status?.overdue?.amount || 0}
+              value={filteredSummary.by_status.overdue.amount || 0}
               precision={2}
               prefix={<BarChartOutlined />}
               suffix="元"
@@ -274,8 +301,9 @@ function ReceivableList() {
               style={{ width: 140 }}
               allowClear
             >
-              <Option value="unpaid">未付款</Option>
-              <Option value="partial">部分付款</Option>
+              <Option value="not_due">未到期</Option>
+              <Option value="due_soon">即将到期</Option>
+              <Option value="overdue">已逾期</Option>
             </Select>
             <Button onClick={loadData}>刷新</Button>
           </Space>

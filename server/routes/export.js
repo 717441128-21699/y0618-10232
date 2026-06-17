@@ -2,7 +2,7 @@ const express = require('express');
 const ExcelJS = require('exceljs');
 const dayjs = require('dayjs');
 const db = require('../database/db');
-const { getReceivableStatus, getOverdueLevelText, getAgeingBucketText, getAgeingBucket } = require('../utils/receivable');
+const { getReceivableStatus, getOverdueLevelText, getAgeingBucketText, getAgeingBucket, calculatePaymentSpeed } = require('../utils/receivable');
 
 const router = express.Router();
 
@@ -376,6 +376,160 @@ router.get('/customer-statement/:customer_id', async (req, res) => {
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="客户对账单_${customer.name}_${dayjs().format('YYYYMMDD')}.xlsx`);
+
+  await workbook.xlsx.write(res);
+  res.end();
+});
+
+router.get('/payment-speed', async (req, res) => {
+  const { customer_id, start_date, end_date } = req.query;
+
+  let whereClause = 'WHERE 1=1';
+  let params = [];
+
+  if (customer_id) {
+    whereClause += ' AND i.customer_id = ?';
+    params.push(customer_id);
+  }
+
+  if (start_date) {
+    whereClause += ' AND p.payment_date >= ?';
+    params.push(start_date);
+  }
+
+  if (end_date) {
+    whereClause += ' AND p.payment_date <= ?';
+    params.push(end_date);
+  }
+
+  const payments = await db.prepare(`
+    SELECT p.*, i.invoice_date, i.customer_id
+    FROM payments p
+    JOIN invoices i ON p.invoice_id = i.id
+    ${whereClause}
+    ORDER BY p.payment_date DESC
+  `).all(...params);
+
+  let invoiceWhere = 'WHERE i.remaining_amount <= 0';
+  let invoiceParams = [];
+  if (customer_id) {
+    invoiceWhere += ' AND i.customer_id = ?';
+    invoiceParams.push(customer_id);
+  }
+
+  const invoices = await db.prepare(`
+    SELECT i.*, cu.name as customer_name
+    FROM invoices i
+    JOIN customers cu ON i.customer_id = cu.id
+    ${invoiceWhere}
+  `).all(...invoiceParams);
+
+  const paymentSpeedData = calculatePaymentSpeed(payments, invoices);
+
+  const customerMap = {};
+  invoices.forEach(inv => {
+    customerMap[inv.customer_id] = inv.customer_name;
+  });
+
+  const customerData = paymentSpeedData.map(item => ({
+    ...item,
+    customer_name: customerMap[item.customerId] || '未知客户'
+  }));
+
+  const totalPayments = customerData.reduce((sum, c) => sum + c.totalPayments, 0);
+  const overallAvgDays = customerData.length > 0
+    ? Math.round(customerData.reduce((sum, c) => sum + c.avgDays, 0) / customerData.length)
+    : 0;
+
+  const speedBuckets = [
+    { key: 'fast', label: '快速(≤15天)', min: 0, max: 15 },
+    { key: 'normal', label: '正常(16-30天)', min: 16, max: 30 },
+    { key: 'slow', label: '较慢(31-60天)', min: 31, max: 60 },
+    { key: 'very_slow', label: '很慢(61-90天)', min: 61, max: 90 },
+    { key: 'overdue', label: '严重逾期(>90天)', min: 91, max: Infinity }
+  ];
+
+  const bucketStats = {};
+  speedBuckets.forEach(bucket => {
+    bucketStats[bucket.key] = { count: 0, label: bucket.label };
+  });
+
+  customerData.forEach(customer => {
+    for (const bucket of speedBuckets) {
+      if (customer.avgDays >= bucket.min && customer.avgDays <= bucket.max) {
+        bucketStats[bucket.key].count++;
+        break;
+      }
+    }
+  });
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = '应收账款管理系统';
+  workbook.created = new Date();
+
+  const summarySheet = workbook.addWorksheet('汇总表');
+  summarySheet.columns = [
+    { header: '指标', key: 'item', width: 25 },
+    { header: '数值', key: 'value', width: 20 }
+  ];
+
+  summarySheet.addRow({ item: '统计期间', value: start_date && end_date ? `${start_date} 至 ${end_date}` : '全部' });
+  summarySheet.addRow({ item: '客户总数', value: customerData.length });
+  summarySheet.addRow({ item: '总付款笔数', value: totalPayments });
+  summarySheet.addRow({ item: '总体平均回款天数', value: overallAvgDays });
+
+  const distributionSheet = workbook.addWorksheet('速度分布');
+  distributionSheet.columns = [
+    { header: '回款速度区间', key: 'bucket', width: 25 },
+    { header: '客户数量', key: 'count', width: 15 },
+    { header: '占比', key: 'percentage', width: 15 }
+  ];
+
+  speedBuckets.forEach(bucket => {
+    const count = bucketStats[bucket.key].count;
+    const percentage = customerData.length > 0 ? ((count / customerData.length) * 100).toFixed(2) + '%' : '0%';
+    distributionSheet.addRow({
+      bucket: bucket.label,
+      count: count,
+      percentage: percentage
+    });
+  });
+
+  const rankingSheet = workbook.addWorksheet('客户排名');
+  rankingSheet.columns = [
+    { header: '排名', key: 'rank', width: 8 },
+    { header: '客户名称', key: 'customer_name', width: 25 },
+    { header: '付款次数', key: 'totalPayments', width: 12 },
+    { header: '平均回款天数', key: 'avgDays', width: 15 },
+    { header: '最快回款天数', key: 'fastest', width: 15 },
+    { header: '最慢回款天数', key: 'slowest', width: 15 },
+    { header: '总付款金额', key: 'totalAmount', width: 18 }
+  ];
+
+  const sortedCustomers = [...customerData].sort((a, b) => a.avgDays - b.avgDays);
+  sortedCustomers.forEach((customer, index) => {
+    const daysList = customer.invoices.map(inv => inv.daysToPay);
+    const fastest = Math.min(...daysList);
+    const slowest = Math.max(...daysList);
+    const totalAmount = customer.invoices.reduce((sum, inv) => sum + inv.amount, 0);
+
+    rankingSheet.addRow({
+      rank: index + 1,
+      customer_name: customer.customer_name,
+      totalPayments: customer.totalPayments,
+      avgDays: customer.avgDays,
+      fastest: fastest,
+      slowest: slowest,
+      totalAmount: totalAmount
+    });
+  });
+
+  const dateSuffix = start_date && end_date 
+    ? `${start_date}_${end_date}` 
+    : dayjs().format('YYYYMMDD');
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="回款速度分析表_${dateSuffix}.xlsx`);
 
   await workbook.xlsx.write(res);
   res.end();

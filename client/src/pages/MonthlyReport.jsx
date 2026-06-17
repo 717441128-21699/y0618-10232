@@ -16,6 +16,47 @@ function MonthlyReport() {
     loadData();
   }, [selectedMonth]);
 
+  const transformData = (rawData) => {
+    const summary = rawData.summary || {};
+    const ageingSummary = rawData.ageing_summary || {};
+    
+    const totalReceivable = summary.total_receivable || 0;
+    
+    const ageingTableData = [
+      { period: '未到期', ...ageingSummary.not_due, percentage: totalReceivable > 0 ? (ageingSummary.not_due?.amount || 0) / totalReceivable * 100 : 0 },
+      { period: '0-30天', ...ageingSummary['0-30'], percentage: totalReceivable > 0 ? (ageingSummary['0-30']?.amount || 0) / totalReceivable * 100 : 0 },
+      { period: '31-60天', ...ageingSummary['31-60'], percentage: totalReceivable > 0 ? (ageingSummary['31-60']?.amount || 0) / totalReceivable * 100 : 0 },
+      { period: '61-90天', ...ageingSummary['61-90'], percentage: totalReceivable > 0 ? (ageingSummary['61-90']?.amount || 0) / totalReceivable * 100 : 0 },
+      { period: '91-180天', ...ageingSummary['91-180'], percentage: totalReceivable > 0 ? (ageingSummary['91-180']?.amount || 0) / totalReceivable * 100 : 0 },
+      { period: '180天以上', ...ageingSummary.over_180, percentage: totalReceivable > 0 ? (ageingSummary.over_180?.amount || 0) / totalReceivable * 100 : 0 }
+    ];
+
+    const invoices = (rawData.new_invoices || []).map(inv => ({
+      ...inv,
+      invoice_amount: inv.total_amount
+    }));
+
+    return {
+      ...rawData,
+      invoices: invoices,
+      payments: rawData.received_payments || [],
+      ageing_summary: {
+        ...ageingSummary,
+        '180+': ageingSummary.over_180
+      },
+      ageing_table: ageingTableData,
+      summary: {
+        ...summary,
+        invoice_count: summary.new_invoices_count,
+        invoice_amount: summary.new_invoices_amount,
+        payment_count: summary.received_count,
+        payment_amount: summary.received_amount,
+        receivable_balance: summary.total_receivable,
+        balance_change: 0
+      }
+    };
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -24,7 +65,7 @@ function MonthlyReport() {
         month: selectedMonth?.month() + 1
       };
       const res = await receivableApi.monthlyReport(params);
-      setData(res);
+      setData(transformData(res));
     } catch (error) {
       message.error('加载月度报告失败');
     } finally {

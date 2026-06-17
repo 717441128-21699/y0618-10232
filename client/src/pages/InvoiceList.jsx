@@ -105,6 +105,7 @@ function InvoiceList() {
     setEditingItem(record);
     form.setFieldsValue({
       ...record,
+      invoice_amount: record.amount,
       invoice_date: record.invoice_date ? dayjs(record.invoice_date) : null,
       due_date: record.due_date ? dayjs(record.due_date) : null
     });
@@ -148,9 +149,13 @@ function InvoiceList() {
       const values = await form.validateFields();
       const submitData = {
         ...values,
+        amount: values.invoice_amount,
         invoice_date: values.invoice_date?.format('YYYY-MM-DD'),
         due_date: values.due_date?.format('YYYY-MM-DD')
       };
+      delete submitData.invoice_amount;
+      delete submitData.tax_rate;
+      delete submitData.paid_amount;
       if (editingItem) {
         await invoiceApi.update(editingItem.id, submitData);
         message.success('更新成功');
@@ -348,7 +353,7 @@ function InvoiceList() {
             </Col>
           </Row>
           <Row gutter={16}>
-            <Col span={8}>
+            <Col span={12}>
               <Form.Item
                 name="invoice_amount"
                 label="发票金额"
@@ -357,16 +362,7 @@ function InvoiceList() {
                 <InputNumber min={0} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
-            <Col span={8}>
-              <Form.Item
-                name="tax_rate"
-                label="税率"
-                rules={[{ required: true, message: '请输入税率' }]}
-              >
-                <InputNumber min={0} max={1} step={0.01} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
+            <Col span={12}>
               <Form.Item
                 name="tax_amount"
                 label="税额"
@@ -386,8 +382,11 @@ function InvoiceList() {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="paid_amount" label="已付金额">
-                <InputNumber min={0} style={{ width: '100%' }} />
+              <Form.Item
+                name="payment_method"
+                label="付款方式"
+              >
+                <Input placeholder="请输入付款方式" />
               </Form.Item>
             </Col>
           </Row>

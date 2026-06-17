@@ -19,7 +19,12 @@ api.interceptors.request.use(
 );
 
 api.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    if (response.config.responseType === 'blob') {
+      return response;
+    }
+    return response.data;
+  },
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
@@ -87,22 +92,53 @@ export const receivableApi = {
   customerStatement: (id, params) => api.get(`/receivables/customer-statement/${id}`, { params })
 };
 
+const downloadFile = (response, defaultFilename) => {
+  const disposition = response.headers['content-disposition'];
+  let filename = defaultFilename;
+  if (disposition) {
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    if (match && match[1]) {
+      filename = decodeURIComponent(match[1]);
+    }
+  }
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+};
+
 export const exportApi = {
-  ageingAnalysis: (params) => {
-    const query = new URLSearchParams(params).toString();
-    window.open(`/api/export/ageing-analysis?${query}`, '_blank');
+  ageingAnalysis: async (params) => {
+    const response = await api.get('/export/ageing-analysis', {
+      params,
+      responseType: 'blob'
+    });
+    downloadFile(response, '应收账款账龄分析表.xlsx');
   },
-  paymentSpeed: (params) => {
-    const query = new URLSearchParams(params).toString();
-    window.open(`/api/export/payment-speed?${query}`, '_blank');
+  paymentSpeed: async (params) => {
+    const response = await api.get('/export/payment-speed', {
+      params,
+      responseType: 'blob'
+    });
+    downloadFile(response, '回款速度分析表.xlsx');
   },
-  monthlyReport: (params) => {
-    const query = new URLSearchParams(params).toString();
-    window.open(`/api/export/monthly-report?${query}`, '_blank');
+  monthlyReport: async (params) => {
+    const response = await api.get('/export/monthly-report', {
+      params,
+      responseType: 'blob'
+    });
+    downloadFile(response, '月度报告.xlsx');
   },
-  customerStatement: (id, params) => {
-    const query = new URLSearchParams(params).toString();
-    window.open(`/api/export/customer-statement/${id}?${query}`, '_blank');
+  customerStatement: async (id, params) => {
+    const response = await api.get(`/export/customer-statement/${id}`, {
+      params,
+      responseType: 'blob'
+    });
+    downloadFile(response, '客户对账单.xlsx');
   }
 };
 

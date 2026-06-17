@@ -76,6 +76,7 @@ router.get('/', async (req, res) => {
     const statusInfo = getReceivableStatus(invoice);
     return {
       ...invoice,
+      invoice_amount: invoice.amount,
       ...statusInfo,
       overdueLevelText: getOverdueLevelText(statusInfo.overdueLevel)
     };
@@ -135,6 +136,7 @@ router.get('/:id', async (req, res) => {
 
   res.json({
     ...invoice,
+    invoice_amount: invoice.amount,
     ...statusInfo,
     overdueLevelText: getOverdueLevelText(statusInfo.overdueLevel),
     payments,
@@ -144,6 +146,7 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
   const {
+    invoice_no,
     customer_id,
     contract_id,
     order_id,
@@ -164,7 +167,7 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: '付款日期不能早于开票日期' });
   }
 
-  const invoice_no = generateInvoiceNo();
+  const finalInvoiceNo = invoice_no || generateInvoiceNo();
 
   const result = await db.run(`
     INSERT INTO invoices (
@@ -174,7 +177,7 @@ router.post('/', async (req, res) => {
       paid_amount, remaining_amount, payment_method, remarks
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', 0, ?, ?, ?)
   `,
-    invoice_no,
+    finalInvoiceNo,
     customer_id,
     contract_id || null,
     order_id || null,
@@ -190,13 +193,14 @@ router.post('/', async (req, res) => {
 
   res.json({
     id: result.lastInsertRowid,
-    invoice_no,
+    invoice_no: finalInvoiceNo,
     message: '发票创建成功'
   });
 });
 
 router.put('/:id', async (req, res) => {
   const {
+    invoice_no,
     customer_id,
     contract_id,
     order_id,
@@ -227,13 +231,14 @@ router.put('/:id', async (req, res) => {
 
   await db.run(`
     UPDATE invoices 
-    SET customer_id = ?, contract_id = ?, order_id = ?,
+    SET invoice_no = ?, customer_id = ?, contract_id = ?, order_id = ?,
         amount = ?, tax_amount = ?, total_amount = ?,
         invoice_date = ?, due_date = ?, status = ?,
         remaining_amount = ?, payment_method = ?, remarks = ?,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `,
+    invoice_no || invoice.invoice_no,
     customer_id,
     contract_id || null,
     order_id || null,

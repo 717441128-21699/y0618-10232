@@ -86,6 +86,7 @@ function PaymentList() {
     setSelectedInvoice(inv || null);
     form.setFieldsValue({
       ...record,
+      customer_id: record.customer_id,
       payment_date: record.payment_date ? dayjs(record.payment_date) : null
     });
     setModalVisible(true);
@@ -96,6 +97,7 @@ function PaymentList() {
       await paymentApi.delete(id);
       message.success('删除成功');
       loadData();
+      loadInvoices();
     } catch (error) {
       message.error(error.response?.data?.error || '删除失败');
     }
@@ -104,6 +106,11 @@ function PaymentList() {
   const handleInvoiceChange = (invoiceId) => {
     const inv = invoices.find(i => i.id === invoiceId);
     setSelectedInvoice(inv || null);
+    if (inv) {
+      form.setFieldsValue({ customer_id: inv.customer_id });
+    } else {
+      form.setFieldsValue({ customer_id: undefined });
+    }
     const currentAmount = form.getFieldValue('amount');
     if (currentAmount && inv && currentAmount > inv.remaining_amount) {
       form.setFieldsValue({ amount: inv.remaining_amount });
@@ -225,6 +232,9 @@ function PaymentList() {
         width={650}
       >
         <Form form={form} layout="vertical">
+          <Form.Item name="customer_id" hidden>
+            <Input />
+          </Form.Item>
           {selectedInvoice && selectedInvoice.remaining_amount > 0 && (
             <Alert
               message={`该发票待付金额：¥ ${selectedInvoice.remaining_amount?.toLocaleString() || 0}`}
