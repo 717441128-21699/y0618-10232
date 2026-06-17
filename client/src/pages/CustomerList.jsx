@@ -17,8 +17,10 @@ import {
 } from 'antd';
 import { PlusOutlined, SearchOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons';
 import { customerApi, exportApi } from '../api';
+import { useNavigate } from 'react-router-dom';
 
 function CustomerList() {
+  const navigate = useNavigate();
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -131,10 +133,11 @@ function CustomerList() {
     },
     {
       title: '操作',
-      width: 220,
+      width: 320,
       render: (_, record) => (
-        <Space>
+        <Space wrap>
           <Button size="small" icon={<EyeOutlined />} onClick={() => handleView(record.id)}>查看</Button>
+          <Button size="small" onClick={() => navigate(`/customers/${record.id}/statement`)}>往来对账</Button>
           <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
           <Popconfirm title="确定要删除该客户吗？" onConfirm={() => handleDelete(record.id)}>
             <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>

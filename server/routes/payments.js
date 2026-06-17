@@ -4,6 +4,114 @@ const { generatePaymentNo } = require('../utils/receivable');
 
 const router = express.Router();
 
+router.post('/batch-create', async (req, res) => {
+  const {
+    customer_id,
+    total_amount,
+    payment_date,
+    payment_method,
+    allocations
+  } = req.body;
+
+  if (!total_amount || !payment_date || !allocations || !Array.isArray(allocations) || allocations.length === 0) {
+    return res.status(400).json({ error: '必填字段不能为空' });
+  }
+
+  if (total_amount <= 0) {
+    return res.status(400).json({ error: '总到账金额必须大于0' });
+  }
+
+  const totalAllocated = allocations.reduce((sum, item) => sum + (item.amount || 0), 0);
+  if (Math.abs(totalAllocated - total_amount) > 0.01) {
+    return res.status(400).json({ 
+      error: `分配金额合计 ¥${totalAllocated.toLocaleString()} 与总到账金额 ¥${total_amount.toLocaleString()} 不一致` 
+    });
+  }
+
+  const invoiceIds = allocations.map(item => item.invoice_id);
+  const invoices = await db.all(`
+    SELECT * FROM invoices WHERE id IN (${invoiceIds.map(() => '?').join(',')})
+  `, ...invoiceIds);
+
+  if (invoices.length !== invoiceIds.length) {
+    return res.status(400).json({ error: '存在无效的发票ID' });
+  }
+
+  const invoiceMap = {};
+  invoices.forEach(inv => {
+    invoiceMap[inv.id] = inv;
+  });
+
+  for (const item of allocations) {
+    const invoice = invoiceMap[item.invoice_id];
+    if (item.amount <= 0) {
+      return res.status(400).json({ 
+        error: `发票 ${invoice.invoice_no} 的分配金额必须大于0` 
+      });
+    }
+    if (item.amount > invoice.remaining_amount) {
+      return res.status(400).json({ 
+        error: `发票 ${invoice.invoice_no} 的分配金额 ¥${item.amount.toLocaleString()} 超过待付金额 ¥${invoice.remaining_amount.toLocaleString()}` 
+      });
+    }
+  }
+
+  try {
+    await db.run('BEGIN TRANSACTION');
+
+    const createdPayments = [];
+
+    for (const item of allocations) {
+      const invoice = invoiceMap[item.invoice_id];
+      const payment_no = generatePaymentNo();
+
+      const result = await db.run(`
+        INSERT INTO payments (
+          payment_no, customer_id, invoice_id, amount,
+          payment_date, payment_method, remarks
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+        payment_no,
+        customer_id || invoice.customer_id,
+        item.invoice_id,
+        item.amount,
+        payment_date,
+        payment_method || null,
+        item.remarks || null
+      );
+
+      const newPaidAmount = invoice.paid_amount + item.amount;
+      const newRemainingAmount = invoice.total_amount - newPaidAmount;
+      const newStatus = newRemainingAmount <= 0 ? 'paid' : 'partial';
+
+      await db.run(`
+        UPDATE invoices 
+        SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `, newPaidAmount, newRemainingAmount, newStatus, item.invoice_id);
+
+      createdPayments.push({
+        id: result.lastInsertRowid,
+        payment_no,
+        invoice_id: item.invoice_id,
+        invoice_no: invoice.invoice_no,
+        amount: item.amount
+      });
+    }
+
+    await db.run('COMMIT');
+
+    res.json({
+      message: `成功创建 ${createdPayments.length} 条收款记录`,
+      payments: createdPayments
+    });
+  } catch (error) {
+    await db.run('ROLLBACK');
+    console.error('Batch payment error:', error);
+    res.status(500).json({ error: '批量收款失败：' + error.message });
+  }
+});
+
 router.get('/', async (req, res) => {
   const { 
     page = 1, 

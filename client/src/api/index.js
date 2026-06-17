@@ -81,7 +81,9 @@ export const paymentApi = {
   detail: (id) => api.get(`/payments/${id}`),
   create: (data) => api.post('/payments', data),
   update: (id, data) => api.put(`/payments/${id}`, data),
-  delete: (id) => api.delete(`/payments/${id}`)
+  delete: (id) => api.delete(`/payments/${id}`),
+  batchCreate: (data) => api.post('/payments/batch-create', data),
+  listUnpaid: (customerId) => api.get('/invoices', { params: { customer_id: customerId, status: 'unpaid', pageSize: 1000 } })
 };
 
 export const receivableApi = {

@@ -16,14 +16,18 @@ import {
   Row,
   Col
 } from 'antd';
-import { PlusOutlined, SearchOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, SearchOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined } from '@ant-design/icons';
 import { paymentApi, invoiceApi } from '../api';
+import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
 
+const STORAGE_KEY = 'payment_list_filters';
+
 function PaymentList() {
+  const navigate = useNavigate();
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -43,6 +47,34 @@ function PaymentList() {
   useEffect(() => {
     loadInvoices();
   }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.keyword !== undefined) setKeyword(parsed.keyword);
+        if (parsed.dateRange) {
+          setDateRange([
+            dayjs(parsed.dateRange[0]),
+            dayjs(parsed.dateRange[1])
+          ]);
+        }
+        if (parsed.pagination) setPagination(parsed.pagination);
+      } catch (e) {
+        console.error('Failed to parse saved filters:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const filters = {
+      keyword,
+      dateRange: dateRange ? [dateRange[0].format('YYYY-MM-DD'), dateRange[1].format('YYYY-MM-DD')] : null,
+      pagination
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
+  }, [keyword, dateRange, pagination]);
 
   const loadInvoices = async () => {
     try {
@@ -111,16 +143,20 @@ function PaymentList() {
     } else {
       form.setFieldsValue({ customer_id: undefined });
     }
-    const currentAmount = form.getFieldValue('amount');
-    if (currentAmount && inv && currentAmount > inv.remaining_amount) {
-      form.setFieldsValue({ amount: inv.remaining_amount });
-    }
+    form.validateFields(['amount']).catch(() => {});
   };
 
   const validateAmount = async (rule, value) => {
     if (value && selectedInvoice && value > selectedInvoice.remaining_amount) {
       throw new Error(`收款金额不能超过待付金额 ¥${selectedInvoice.remaining_amount?.toLocaleString()}`);
     }
+  };
+
+  const handleReset = () => {
+    setKeyword('');
+    setDateRange(null);
+    setPagination({ current: 1, pageSize: 10 });
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   const handleSubmit = async () => {
@@ -203,6 +239,8 @@ function PaymentList() {
               onChange={setDateRange}
               placeholder={['开始日期', '结束日期']}
             />
+            <Button onClick={handleReset}>重置</Button>
+            <Button icon={<AppstoreOutlined />} onClick={() => navigate('/payments/batch')}>批量登记收款</Button>
             <Button icon={<PlusOutlined />} type="primary" onClick={handleAdd}>新增收款</Button>
           </Space>
         }
