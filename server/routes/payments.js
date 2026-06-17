@@ -217,6 +217,12 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: '客户与发票不匹配' });
     }
 
+    if (amount > newInvoice.remaining_amount) {
+      return res.status(400).json({ 
+        error: `收款金额不能超过新发票待付金额 ¥${newInvoice.remaining_amount.toLocaleString()}` 
+      });
+    }
+
     const oldPaidAmount = oldInvoice.paid_amount - payment.amount;
     const oldRemainingAmount = oldInvoice.total_amount - oldPaidAmount;
     const oldStatus = oldRemainingAmount <= 0 ? 'paid' : (oldPaidAmount > 0 ? 'partial' : 'unpaid');
@@ -226,12 +232,6 @@ router.put('/:id', async (req, res) => {
       SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, oldPaidAmount, oldRemainingAmount, oldStatus, oldInvoice.id);
-
-    if (amount > newInvoice.remaining_amount) {
-      return res.status(400).json({ 
-        error: `收款金额不能超过发票待付金额 ¥${newInvoice.remaining_amount.toLocaleString()}` 
-      });
-    }
 
     const newPaidAmount = newInvoice.paid_amount + amount;
     const newRemainingAmount = newInvoice.total_amount - newPaidAmount;

@@ -222,12 +222,19 @@ router.put('/:id', async (req, res) => {
     return res.status(404).json({ error: '发票不存在' });
   }
 
-  if (invoice.status === 'paid' && total_amount < invoice.paid_amount) {
+  if (total_amount < invoice.paid_amount) {
     return res.status(400).json({ error: '发票总金额不能小于已收款金额' });
   }
 
   const remaining_amount = Math.max(0, total_amount - invoice.paid_amount);
-  const newStatus = remaining_amount <= 0 ? 'paid' : invoice.status;
+  let newStatus;
+  if (remaining_amount <= 0) {
+    newStatus = 'paid';
+  } else if (invoice.paid_amount > 0) {
+    newStatus = 'partial';
+  } else {
+    newStatus = 'unpaid';
+  }
 
   await db.run(`
     UPDATE invoices 
